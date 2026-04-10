@@ -1,0 +1,48 @@
+[tools]
+go = "1.26.1"
+zig = "0.15.2"
+uv = "0.9.28"
+
+[env]
+MISE_GO_SET_GOROOT = true
+GOPATH = "{{env.HOME}}/.local/gopath/1.26.1"
+CGO_ENABLED = "1"
+CC = "zig cc"
+
+[tasks.build]
+description = "Build the memory-md binary"
+run = """
+#!/usr/bin/env bash
+version=$(git describe --tags --always --dirty 2>/dev/null || echo dev)
+go build -tags sqlite_fts5 -ldflags "-X main.version=$version" -o memory-md .
+"""
+
+[tasks.test]
+description = "Run all tests"
+run = """
+#!/usr/bin/env bash
+go test -tags sqlite_fts5 ./...
+"""
+
+[tasks.clean]
+description = "Remove build artifacts"
+run = """
+#!/usr/bin/env bash
+[[ -f "memory-md" ]] && rm -f memory-md || echo "No build artifacts to clean"
+"""
+
+[tasks.run]
+description = "Build and run the daemon (requires MEMORY_MD_DIR)"
+depends = ["build"]
+run = """
+#!/usr/bin/env bash
+[[ -n "$MEMORY_MD_DIR" ]] && ./memory-md start-daemon || echo "Please set MEMORY_MD_DIR to run the daemon"
+"""
+
+[tasks.lint]
+description = "Run go vet"
+run = """
+#!/usr/bin/env bash
+go vet ./...
+"""
+
