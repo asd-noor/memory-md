@@ -36,6 +36,17 @@ func New(db *sql.DB, memDir, sidecarSockPath string) *Engine {
 	return &Engine{db: db, memDir: memDir, sidecarCl: cl}
 }
 
+// SidecarActive reports whether the embedding sidecar is configured and
+// presumed running (i.e. it started successfully at daemon launch).
+func (e *Engine) SidecarActive() bool {
+	return e.sidecarCl != nil
+}
+
+// MemDir returns the memory directory this engine is operating on.
+func (e *Engine) MemDir() string {
+	return e.memDir
+}
+
 // ── Read operations ───────────────────────────────────────────────────────────
 
 // GetResult is the return type of Get.
@@ -137,6 +148,64 @@ func (e *Engine) Search(query string, topK int) ([]SearchResult, error) {
 		results = append(results, SearchResult{Path: path, Heading: heading, Content: content})
 	}
 	return results, nil
+}
+
+// ListFiles returns the names (without .md) of all indexed files, sorted alphabetically.
+func (e *Engine) ListFiles() ([]string, error) {
+	rows, err := e.db.Query(`SELECT file_path FROM files ORDER BY file_path`)
+	if err != nil {
+		return nil, fmt.Errorf("engine.ListFiles: %w", err)
+	}
+	defer rows.Close()
+
+	prefix := e.memDir + string(filepath.Separator)
+	var names []string
+	for rows.Next() {
+		var fp string
+		if err := rows.Scan(&fp); err != nil {
+			continue
+		}
+		name := strings.TrimPrefix(fp, prefix)
+		name = strings.TrimSuffix(name, ".md")
+		names = append(names, name)
+	}
+	return names, rows.Err()
+}
+
+// ListSections returns all section paths within a named file, sorted alphabetically.
+func (e *Engine) ListSections(name string) ([]string, error) {
+	if err := ValidateName(name); err != nil {
+		return nil, err
+	}
+	filePath := filepath.Join(e.memDir, name+".md")
+
+	// Check the file exists in the index.
+	var count int
+	if err := e.db.QueryRow(`SELECT COUNT(*) FROM files WHERE file_path = ?`, filePath).Scan(&count); err != nil {
+		return nil, fmt.Errorf("engine.ListSections: %w", err)
+	}
+	if count == 0 {
+		return nil, fmt.Errorf("file not found: %s", name)
+	}
+
+	rows, err := e.db.Query(
+		`SELECT path FROM sections WHERE file_path = ? ORDER BY heading_start_byte`,
+		filePath,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("engine.ListSections: %w", err)
+	}
+	defer rows.Close()
+
+	var paths []string
+	for rows.Next() {
+		var p string
+		if err := rows.Scan(&p); err != nil {
+			continue
+		}
+		paths = append(paths, p)
+	}
+	return paths, rows.Err()
 }
 
 // ── File-level operations ─────────────────────────────────────────────────────

@@ -46,9 +46,13 @@ func main() {
 	cmd := os.Args[1]
 	args := os.Args[2:]
 
-	// version does not require MEMORY_MD_DIR.
+	// version and help do not require MEMORY_MD_DIR.
 	if cmd == "version" {
 		fmt.Println("memory-md", version)
+		return
+	}
+	if cmd == "help" {
+		printUsage(os.Stdout)
 		return
 	}
 
@@ -72,7 +76,18 @@ func main() {
 		}
 		runValidateFile(memDir, args[0])
 
+	case "status":
+		runStatus(memDir)
+
 	// Socket-based subcommands.
+	case "list":
+		name := ""
+		if len(args) > 0 {
+			name = args[0]
+		}
+		resp := sendRequest(memDir, map[string]any{"Cmd": "list", "Name": name})
+		handleListResponse(resp)
+
 	case "get":
 		if len(args) == 0 {
 			fatal("usage: memory-md get <path>")
@@ -150,6 +165,46 @@ func main() {
 	default:
 		usageAndExit()
 	}
+}
+
+func handleStatusResponse(resp map[string]any) {
+	if ok, _ := resp["Ok"].(bool); !ok {
+		errMsg, _ := resp["Error"].(string)
+		fatal(errMsg)
+	}
+	sidecar, _ := resp["Sidecar"].(bool)
+	memDir, _ := resp["MemDir"].(string)
+	fmt.Printf("daemon:  running  (%s)\n", memDir)
+	if sidecar {
+		fmt.Println("sidecar: active   (vector search enabled)")
+	} else {
+		fmt.Println("sidecar: inactive (FTS5-only mode)")
+	}
+}
+
+func handleListResponse(resp map[string]any) {
+	if ok, _ := resp["Ok"].(bool); !ok {
+		errMsg, _ := resp["Error"].(string)
+		fatal(errMsg)
+	}
+	rawItems, _ := resp["Items"].([]any)
+	for _, item := range rawItems {
+		if s, ok := item.(string); ok {
+			fmt.Println(s)
+		}
+	}
+}
+
+func runStatus(memDir string) {
+	sock := sockPath(memDir)
+	conn, err := net.Dial("unix", sock)
+	if err != nil {
+		fmt.Println("daemon:  not running")
+		return
+	}
+	conn.Close()
+	resp := sendRequest(memDir, map[string]any{"Cmd": "ping"})
+	handleStatusResponse(resp)
 }
 
 // ── Client-side subcommands ───────────────────────────────────────────────────
@@ -339,11 +394,13 @@ func fatal(msg string) {
 	os.Exit(1)
 }
 
-func usageAndExit() {
-	fmt.Fprintln(os.Stderr, `usage: memory-md <command> [args]
+func printUsage(w io.Writer) {
+	fmt.Fprintln(w, `usage: memory-md <command> [args]
 
 Commands:
+  status                   Show whether the daemon is running and sidecar mode
   start-daemon              Start the daemon (foreground)
+  list [<name>]             List files, or sections within a file
   get <path>                Exact path lookup
   search <query> [--top N]  Hybrid FTS5 + vector search
   new <path> [--heading T]  Create a new section (body from stdin)
@@ -353,6 +410,11 @@ Commands:
   delete-file <name>        Delete a .md file and its index data
   snapshot                  Copy all .md files into a timestamped subdirectory
   validate-file <name>      Validate structural rules of a .md file
-  version                   Print version and exit`)
+  version                   Print version and exit
+  help                      Show this help and exit`)
+}
+
+func usageAndExit() {
+	printUsage(os.Stderr)
 	os.Exit(1)
 }

@@ -183,6 +183,17 @@ type okResponse struct {
 	Ok bool `json:"Ok"`
 }
 
+type listResponse struct {
+	Ok    bool     `json:"Ok"`
+	Items []string `json:"Items"`
+}
+
+type pingResponse struct {
+	Ok      bool   `json:"Ok"`
+	Sidecar bool   `json:"Sidecar"`
+	MemDir  string `json:"MemDir"`
+}
+
 type getResponse struct {
 	Ok      bool   `json:"Ok"`
 	Heading string `json:"Heading"`
@@ -275,6 +286,32 @@ func serve(conn net.Conn, eng *engine.Engine) {
 			return
 		}
 		writeJSON(conn, okResponse{Ok: true})
+
+	case "list":
+		if req.Name == "" {
+			names, err := eng.ListFiles()
+			if err != nil {
+				writeJSON(conn, errResponse{Ok: false, Error: err.Error()})
+				return
+			}
+			if names == nil {
+				names = []string{}
+			}
+			writeJSON(conn, listResponse{Ok: true, Items: names})
+		} else {
+			paths, err := eng.ListSections(req.Name)
+			if err != nil {
+				writeJSON(conn, errResponse{Ok: false, Error: err.Error()})
+				return
+			}
+			if paths == nil {
+				paths = []string{}
+			}
+			writeJSON(conn, listResponse{Ok: true, Items: paths})
+		}
+
+	case "ping":
+		writeJSON(conn, pingResponse{Ok: true, Sidecar: eng.SidecarActive(), MemDir: eng.MemDir()})
 
 	default:
 		writeJSON(conn, errResponse{Ok: false, Error: "unknown command: " + req.Cmd})
