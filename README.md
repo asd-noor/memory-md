@@ -124,7 +124,7 @@ memory-md <command> [args]
 
 ### `start-daemon`
 
-Runs in the foreground. Use systemd, launchd, tmux, or a process supervisor to manage the lifecycle. The daemon creates a Unix socket at `~/.cache/memory-md/<encoded-dir>/channel.sock` and removes it on exit.
+Runs in the foreground. Use systemd, launchd, tmux, or a process supervisor to manage the lifecycle. The daemon creates a Unix socket at `~/.cache/memory-md/<hash>/channel.sock` and removes it on exit.
 
 If `uv` is found in `PATH`, the daemon writes the embedded Python sidecar to `<cache-dir>/embed.py` and spawns it. It waits up to 30 seconds for the sidecar to become ready. If the sidecar does not start (unsupported hardware, `uv` absent, etc.), the daemon continues in FTS5-only mode.
 
@@ -320,11 +320,28 @@ $MEMORY_MD_DIR/          ← source of truth (plain .md files)
   infra.md
   ...
 
-$HOME/.cache/memory-md/<encoded-dir>/
-  cache.sqlite           ← SQLite index (FTS5 + vec0); fully rebuildable
-  channel.sock           ← Unix socket; created by daemon, removed on exit
-  sidecar.sock           ← embedding sidecar socket (Apple Silicon only)
-  embed.py               ← Python sidecar script (written by daemon at startup)
+$HOME/.cache/memory-md/
+  embed.py               ← Python sidecar script (shared across all projects)
+  <hash>/
+    dir                  ← plain-text breadcrumb: the absolute MEMORY_MD_DIR path
+    cache.sqlite         ← SQLite index (FTS5 + vec0); fully rebuildable
+    channel.sock         ← Unix socket; created by daemon, removed on exit
+    sidecar.sock         ← embedding sidecar socket (Apple Silicon only)
+```
+
+`<hash>` is the first 16 hex characters of `SHA-256(MEMORY_MD_DIR)` — always 16 characters, keeping the socket path well within the 104-byte `sun_path` limit on macOS (and 108-byte limit on Linux). The `dir` breadcrumb file makes the hashed directories identifiable without running the daemon.
+
+### Finding the cache directory for a memory dir
+
+```sh
+# Show the cache dir for the current MEMORY_MD_DIR (daemon must be running)
+memory-md status
+
+# List all cache dirs and which MEMORY_MD_DIR they belong to
+cat ~/.cache/memory-md/*/dir
+
+# Find the cache dir for a specific MEMORY_MD_DIR
+grep -rl "/your/notes" ~/.cache/memory-md/*/dir
 ```
 
 ### Daemon

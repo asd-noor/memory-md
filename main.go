@@ -32,6 +32,7 @@ import (
 
 	"memory-md/daemon"
 	"memory-md/internal/parser"
+	"memory-md/internal/pathenc"
 )
 
 // version is set at build time via -ldflags "-X main.version=<ver>".
@@ -269,8 +270,7 @@ func sockPath(memDir string) string {
 	if err != nil {
 		fatal("cannot determine home dir: " + err.Error())
 	}
-	encoded := encodeDir(memDir)
-	return filepath.Join(home, ".cache", "memory-md", encoded, "channel.sock")
+	return filepath.Join(home, ".cache", "memory-md", pathenc.Encode(memDir), "channel.sock")
 }
 
 func sendRequest(memDir string, req map[string]any) map[string]any {
@@ -374,19 +374,6 @@ func validateName(name string) error {
 		return fmt.Errorf("name must not include .md suffix")
 	}
 	return nil
-}
-
-func encodeDir(path string) string {
-	if len(path) > 0 && path[0] == '/' {
-		path = path[1:]
-	}
-	b := []byte(path)
-	for i, c := range b {
-		if c == '/' {
-			b[i] = '='
-		}
-	}
-	return string(b)
 }
 
 func fatal(msg string) {

@@ -39,6 +39,22 @@ memory-md start-daemon &
 
 ---
 
+## Find the cache directory
+
+The cache directory (SQLite index, socket) uses a SHA-256 hash of `MEMORY_MD_DIR` as its name. To identify which hashed directory belongs to which memory dir:
+
+```sh
+# Show all cache dirs and their corresponding MEMORY_MD_DIR paths
+cat ~/.cache/memory-md/*/dir
+
+# Find the cache dir for a specific path
+grep -rl "/your/notes" ~/.cache/memory-md/*/dir
+```
+
+Each cache directory contains a `dir` file with the original `MEMORY_MD_DIR` path in plain text.
+
+---
+
 ## Browse what's stored
 
 ```sh

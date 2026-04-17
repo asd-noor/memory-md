@@ -29,6 +29,7 @@ import (
 
 	"memory-md/internal/db"
 	"memory-md/internal/engine"
+	"memory-md/internal/pathenc"
 	"memory-md/internal/watcher"
 	"memory-md/sidecar"
 )
@@ -45,11 +46,14 @@ func Run(memDir string) error {
 	if err != nil {
 		return fmt.Errorf("cannot determine home dir: %w", err)
 	}
-	encoded := encodeDir(memDir)
-	cacheDir := filepath.Join(home, ".cache", "memory-md", encoded)
+	baseDir := filepath.Join(home, ".cache", "memory-md")
+	cacheDir := filepath.Join(baseDir, pathenc.Encode(memDir))
 	if err := os.MkdirAll(cacheDir, 0755); err != nil {
 		return fmt.Errorf("cannot create cache dir: %w", err)
 	}
+	// Write a human-readable breadcrumb so the hashed dir is identifiable.
+	dirFile := filepath.Join(cacheDir, "dir")
+	_ = os.WriteFile(dirFile, []byte(memDir+"\n"), 0644)
 
 	// 3. Open SQLite.
 	sqlitePath := filepath.Join(cacheDir, "cache.sqlite")
@@ -68,7 +72,7 @@ func Run(memDir string) error {
 	// 5. Sidecar lifecycle.
 	var sidecarCmd *exec.Cmd
 	if uvPath, err := exec.LookPath("uv"); err == nil {
-		scriptPath := filepath.Join(cacheDir, "embed.py")
+		scriptPath := filepath.Join(baseDir, "embed.py")
 		// Write script if absent or changed.
 		if needsWrite(scriptPath, sidecar.Script) {
 			if err := os.WriteFile(scriptPath, sidecar.Script, 0644); err != nil {
@@ -325,23 +329,6 @@ func writeJSON(conn net.Conn, v any) {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-// encodeDir encodes an absolute path as a cache dir name:
-// strip leading '/', replace remaining '/' with '='.
-func encodeDir(path string) string {
-	if len(path) > 0 && path[0] == '/' {
-		path = path[1:]
-	}
-	result := make([]byte, len(path))
-	for i := 0; i < len(path); i++ {
-		if path[i] == '/' {
-			result[i] = '='
-		} else {
-			result[i] = path[i]
-		}
-	}
-	return string(result)
-}
 
 // needsWrite returns true if the file at path is absent or its contents differ from data.
 func needsWrite(path string, data []byte) bool {
