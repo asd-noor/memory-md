@@ -48,6 +48,7 @@ git clone https://github.com/yourorg/memory-md
 cd memory-md
 mise install        # installs go, zig, uv as declared in mise.toml
 mise run build      # produces ./memory-md binary
+mise run install    # installs memory-md to $HOME/.local/bin
 ```
 
 ### Manual build
@@ -58,7 +59,7 @@ CGO_ENABLED=1 CC="zig cc" go build -tags sqlite_fts5 -o memory-md .
 
 > The `-tags sqlite_fts5` flag is required to include FTS5 support in the bundled SQLite amalgamation.
 
-### Install to PATH
+### Manual install to PATH
 
 ```sh
 cp memory-md /usr/local/bin/

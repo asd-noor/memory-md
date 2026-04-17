@@ -17,6 +17,14 @@ version=$(git describe --tags --always --dirty 2>/dev/null || echo dev)
 go build -tags sqlite_fts5 -ldflags "-X main.version=$version" -o memory-md .
 """
 
+[tasks.install]
+description = "Install the memory-md binary to $HOME/.local/bin"
+depends = ["build"]
+run = """
+#!/usr/bin/env bash
+install -Dm755 memory-md "$HOME/.local/bin/memory-md"
+"""
+
 [tasks.test]
 description = "Run all tests"
 run = """
