@@ -25,7 +25,7 @@ import (
 // The SetextHeadingParser is intentionally omitted so that setext-style
 // headings (underlines with === or ---) are parsed as ordinary paragraphs.
 var md = goldmark.New(
-	goldmark.WithParserOptions(
+	goldmark.WithParser(gparser.NewParser(
 		gparser.WithBlockParsers(
 			util.Prioritized(gparser.NewThematicBreakParser(), 200),
 			util.Prioritized(gparser.NewListParser(), 300),
@@ -37,7 +37,7 @@ var md = goldmark.New(
 			util.Prioritized(gparser.NewHTMLBlockParser(), 900),
 			util.Prioritized(gparser.NewParagraphParser(), 1000),
 		),
-	),
+	)),
 )
 
 // Section is one indexed unit of content — a single ATX heading (level ≥ 2)
@@ -368,7 +368,7 @@ func ValidateFile(r *ParseResult) []Issue {
 // Slugify converts heading text to a URL-safe path segment:
 // lowercase, spaces → '-', all other non-alphanumeric characters stripped.
 func Slugify(text string) string {
-	text = strings.ToLower(text)
+	text = strings.TrimSpace(strings.ToLower(text))
 	var buf strings.Builder
 	for _, r := range text {
 		switch {
