@@ -108,7 +108,7 @@ memory-md <command> [args]
 
 | Command | Daemon needed | Description |
 |---|---|---|
-| `status` | No | Show whether the daemon is running and which search mode is active |
+| `status` | No | Show whether the daemon is running, which search mode is active, and whether indexing is in progress |
 | `start-daemon` | — | Start the daemon in the foreground |
 | `list [<name>]` | Yes | List all files, or all section paths within a named file |
 | `get <path>` | Yes | Exact path lookup |
@@ -122,6 +122,28 @@ memory-md <command> [args]
 | `validate-file <name>` | No | Check structural rules of a `.md` file |
 | `version` | No | Print version and exit |
 | `help` | No | Show usage and exit |
+
+### `status`
+
+Prints daemon health, sidecar mode, and live indexing state. Can be called without the daemon running (reports `not running` in that case).
+
+**Example output (daemon running, idle):**
+```
+daemon:  running  (/home/user/notes)
+sidecar: active   (vector search enabled)
+indexing: idle
+```
+
+**Example output (daemon indexing a file change):**
+```
+daemon:  running  (/home/user/notes)
+sidecar: active   (vector search enabled)
+indexing: active
+```
+
+The `indexing: active` state appears while the daemon is processing a file-system event — typically sub-second for small files, a few seconds when the sidecar is generating embeddings for a large batch. Poll `status` to confirm the index has caught up after bulk writes.
+
+---
 
 ### `start-daemon`
 

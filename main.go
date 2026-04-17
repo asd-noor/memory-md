@@ -175,11 +175,17 @@ func handleStatusResponse(resp map[string]any) {
 	}
 	sidecar, _ := resp["Sidecar"].(bool)
 	memDir, _ := resp["MemDir"].(string)
+	isIndexing, _ := resp["IsIndexing"].(bool)
 	fmt.Printf("daemon:  running  (%s)\n", memDir)
 	if sidecar {
 		fmt.Println("sidecar: active   (vector search enabled)")
 	} else {
 		fmt.Println("sidecar: inactive (FTS5-only mode)")
+	}
+	if isIndexing {
+		fmt.Println("indexing: active")
+	} else {
+		fmt.Println("indexing: idle")
 	}
 }
 

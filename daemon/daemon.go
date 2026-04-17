@@ -193,9 +193,10 @@ type listResponse struct {
 }
 
 type pingResponse struct {
-	Ok      bool   `json:"Ok"`
-	Sidecar bool   `json:"Sidecar"`
-	MemDir  string `json:"MemDir"`
+	Ok         bool   `json:"Ok"`
+	Sidecar    bool   `json:"Sidecar"`
+	MemDir     string `json:"MemDir"`
+	IsIndexing bool   `json:"IsIndexing"`
 }
 
 type getResponse struct {
@@ -315,7 +316,7 @@ func serve(conn net.Conn, eng *engine.Engine) {
 		}
 
 	case "ping":
-		writeJSON(conn, pingResponse{Ok: true, Sidecar: eng.SidecarActive(), MemDir: eng.MemDir()})
+		writeJSON(conn, pingResponse{Ok: true, Sidecar: eng.SidecarActive(), MemDir: eng.MemDir(), IsIndexing: eng.IsIndexing()})
 
 	default:
 		writeJSON(conn, errResponse{Ok: false, Error: "unknown command: " + req.Cmd})

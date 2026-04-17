@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	sqlite_vec "github.com/asg017/sqlite-vec-go-bindings/cgo"
@@ -22,9 +23,10 @@ import (
 
 // Engine wires the SQLite database, sidecar client, and markdown directory.
 type Engine struct {
-	db        *sql.DB
-	memDir    string
-	sidecarCl *sidecar.Client // nil if sidecar sock path unknown; graceful no-op
+	db             *sql.DB
+	memDir         string
+	sidecarCl      *sidecar.Client // nil if sidecar sock path unknown; graceful no-op
+	activeIndexing int32           // atomic counter: >0 means indexing is in progress
 }
 
 // New constructs an Engine. sidecarSockPath may be empty if the sidecar is not used.
@@ -40,6 +42,11 @@ func New(db *sql.DB, memDir, sidecarSockPath string) *Engine {
 // presumed running (i.e. it started successfully at daemon launch).
 func (e *Engine) SidecarActive() bool {
 	return e.sidecarCl != nil
+}
+
+// IsIndexing reports whether any indexing operation is currently in progress.
+func (e *Engine) IsIndexing() bool {
+	return atomic.LoadInt32(&e.activeIndexing) > 0
 }
 
 // MemDir returns the memory directory this engine is operating on.
@@ -407,6 +414,9 @@ func (e *Engine) Delete(path string) error {
 
 // HandleChanged re-indexes a file that was created or modified.
 func (e *Engine) HandleChanged(filePath string) error {
+	atomic.AddInt32(&e.activeIndexing, 1)
+	defer atomic.AddInt32(&e.activeIndexing, -1)
+
 	src, err := os.ReadFile(filePath)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -492,6 +502,9 @@ func (e *Engine) HandleChanged(filePath string) error {
 
 // HandleDeleted removes index data for a deleted file.
 func (e *Engine) HandleDeleted(filePath string) error {
+	atomic.AddInt32(&e.activeIndexing, 1)
+	defer atomic.AddInt32(&e.activeIndexing, -1)
+
 	tx, err := e.db.Begin()
 	if err != nil {
 		return fmt.Errorf("engine.HandleDeleted begin tx: %w", err)
@@ -516,6 +529,9 @@ func (e *Engine) HandleDeleted(filePath string) error {
 // Files whose mtime matches the cached value are skipped. Files no longer on
 // disk are removed from the index.
 func (e *Engine) SyncDir() error {
+	atomic.AddInt32(&e.activeIndexing, 1)
+	defer atomic.AddInt32(&e.activeIndexing, -1)
+
 	entries, err := os.ReadDir(e.memDir)
 	if err != nil {
 		return fmt.Errorf("engine.SyncDir readdir: %w", err)
