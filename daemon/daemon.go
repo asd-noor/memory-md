@@ -66,8 +66,9 @@ func Run(memDir string) error {
 	sockPath := filepath.Join(cacheDir, "channel.sock")
 	sidecarSockPath := filepath.Join(cacheDir, "sidecar.sock")
 
-	// 4. Remove stale channel.sock.
+	// 4. Remove stale sockets.
 	os.Remove(sockPath)
+	os.Remove(sidecarSockPath)
 
 	// 5. Sidecar lifecycle.
 	var sidecarCmd *exec.Cmd
@@ -139,7 +140,7 @@ func Run(memDir string) error {
 
 	// 9. Handle signals.
 	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, syscall.SIGTERM, syscall.SIGINT)
+	signal.Notify(sigCh, syscall.SIGTERM, syscall.SIGINT, syscall.SIGHUP)
 	go func() {
 		<-sigCh
 		listener.Close()
@@ -160,8 +161,16 @@ func Run(memDir string) error {
 	w.Close()
 	os.Remove(sockPath)
 	if sidecarCmd != nil {
-		sidecarCmd.Process.Kill()
-		sidecarCmd.Wait()
+		sidecarCmd.Process.Signal(syscall.SIGTERM)
+		done := make(chan struct{})
+		go func() { sidecarCmd.Wait(); close(done) }()
+		select {
+		case <-done:
+		case <-time.After(3 * time.Second):
+			sidecarCmd.Process.Kill()
+			<-done
+		}
+		os.Remove(sidecarSockPath)
 	}
 	return nil
 }
