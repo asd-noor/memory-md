@@ -24,11 +24,13 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
 	"memory-md/internal/db"
 	"memory-md/internal/engine"
+	"memory-md/internal/parser"
 	"memory-md/internal/pathenc"
 	"memory-md/internal/watcher"
 	"memory-md/sidecar"
@@ -193,7 +195,9 @@ type errResponse struct {
 }
 
 type okResponse struct {
-	Ok bool `json:"Ok"`
+	Ok               bool     `json:"Ok"`
+	ValidationOk     *bool    `json:"ValidationOk,omitempty"`
+	ValidationErrors []string `json:"ValidationErrors,omitempty"`
 }
 
 type listResponse struct {
@@ -271,14 +275,18 @@ func serve(conn net.Conn, eng *engine.Engine) {
 			writeJSON(conn, errResponse{Ok: false, Error: err.Error()})
 			return
 		}
-		writeJSON(conn, okResponse{Ok: true})
+		validationErrors := validationErrorsForPath(eng.MemDir(), req.Path)
+		validationOk := len(validationErrors) == 0
+		writeJSON(conn, okResponse{Ok: true, ValidationOk: &validationOk, ValidationErrors: validationErrors})
 
 	case "update":
 		if err := eng.Update(req.Path, req.Content); err != nil {
 			writeJSON(conn, errResponse{Ok: false, Error: err.Error()})
 			return
 		}
-		writeJSON(conn, okResponse{Ok: true})
+		validationErrors := validationErrorsForPath(eng.MemDir(), req.Path)
+		validationOk := len(validationErrors) == 0
+		writeJSON(conn, okResponse{Ok: true, ValidationOk: &validationOk, ValidationErrors: validationErrors})
 
 	case "delete":
 		if err := eng.Delete(req.Path); err != nil {
@@ -336,6 +344,34 @@ func writeJSON(conn net.Conn, v any) {
 	data, _ := json.Marshal(v)
 	data = append(data, '\n')
 	conn.Write(data)
+}
+
+func validationErrorsForPath(memDir, path string) []string {
+	name := path
+	if idx := strings.IndexByte(path, '/'); idx >= 0 {
+		name = path[:idx]
+	}
+	if name == "" {
+		return []string{"validation failed: could not determine file name from path"}
+	}
+
+	filePath := filepath.Join(memDir, name+".md")
+	src, err := os.ReadFile(filePath)
+	if err != nil {
+		return []string{fmt.Sprintf("validation failed: cannot read file: %v", err)}
+	}
+
+	result := parser.Parse(filePath, src)
+	issues := parser.ValidateFile(result)
+	if len(issues) == 0 {
+		return nil
+	}
+
+	errors := make([]string, len(issues))
+	for i, issue := range issues {
+		errors[i] = fmt.Sprintf("%s:%d: %s", name, issue.Line, issue.Message)
+	}
+	return errors
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

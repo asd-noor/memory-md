@@ -309,6 +309,12 @@ func handleOkResponse(resp map[string]any) {
 		errMsg, _ := resp["Error"].(string)
 		fatal(errMsg)
 	}
+	rawValidationErrors, _ := resp["ValidationErrors"].([]any)
+	for _, item := range rawValidationErrors {
+		if msg, ok := item.(string); ok {
+			fmt.Println(msg)
+		}
+	}
 }
 
 func handleGetResponse(resp map[string]any) {
