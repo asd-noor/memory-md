@@ -94,6 +94,7 @@ echo "Keys rotate every 90 days." \
 - `--heading` sets the human-readable heading in the file; omit it to use the slug as-is
 - Nesting is unlimited: `auth/api-keys/rotation-policy/details` → `####`
 - `new` fails if the section already exists — use `update` to overwrite
+- After `new` writes the section, `memory-md` immediately validates the target `.md` file and prints any validation errors without rolling the write back
 
 ---
 
@@ -140,6 +141,8 @@ Keys rotate every 90 days.
 ## Update a memory
 
 Replaces the immediate body of a section. Child sections are preserved.
+
+After `update` writes the new body, `memory-md` immediately validates the target `.md` file and prints any validation errors without rolling the edit back.
 
 ```sh
 echo "Updated content here." | memory-md update auth/api-keys

@@ -215,9 +215,17 @@ Keys rotate every 90 days.
 
 Creates a new section. Body content is read from stdin. Fails if the section already exists, if the file does not exist, or (for nested paths) if the parent section does not exist.
 
+After writing the section, `memory-md` immediately validates the target `.md` file. The write is not reverted if validation finds issues; instead, the response includes the validation errors so a human or agent can fix the file manually.
+
 ```sh
 echo "Body text here." | memory-md new auth/api-keys --heading "API Keys"
 echo "Details."        | memory-md new auth/api-keys/rotation-policy   # heading defaults to "rotation-policy"
+```
+
+If validation finds a problem, the command prints lines like:
+
+```text
+auth:12: duplicate path: auth/api-keys (also at line 8)
 ```
 
 The heading level is derived from the path depth: 2 segments → `##`, 3 segments → `###`, and so on.
@@ -225,6 +233,8 @@ The heading level is derived from the path depth: 2 segments → `##`, 3 segment
 ### `update <path>`
 
 Replaces the **immediate body** of an existing section. Child sections are preserved in the file.
+
+Like `new`, `update` validates the target `.md` file immediately after writing. Validation failures do not roll back the edit; the command prints the validation errors so a human or agent can fix the file manually.
 
 ```sh
 echo "Updated policy." | memory-md update auth/api-keys
