@@ -78,7 +78,7 @@ mkdir -p "$MEMORY_MD_DIR"
 memory-md start-daemon
 
 # 3. Create a file and add sections
-memory-md create-file auth
+memory-md create-file auth "Authentication" "Covers auth-related decisions."
 echo "Keys are hashed with bcrypt before storage." | memory-md new auth/api-keys --heading "API Keys"
 echo "Keys rotate every 90 days."                  | memory-md new auth/api-keys/rotation-policy --heading "Rotation Policy"
 
@@ -116,7 +116,7 @@ memory-md <command> [args]
 | `new <path> [--heading T]` | Yes | Create a new section (body read from stdin) |
 | `update <path>` | Yes | Replace a section's body (from stdin); child sections are preserved |
 | `delete <path>` | Yes | Delete a section and all its children |
-| `create-file <name>` | Yes | Create a new empty `.md` file |
+| `create-file <name> <title> [description]` | Yes | Create a new `.md` file with a `#` title and optional description |
 | `delete-file <name>` | Yes | Delete a `.md` file and all its index data |
 | `snapshot` | No | Copy all `.md` files into a timestamped subdirectory |
 | `validate-file <name>` | No | Check structural rules of a `.md` file |
@@ -248,12 +248,14 @@ Removes a section and all its descendants. The splice covers the full subtree.
 memory-md delete auth/api-keys   # removes api-keys and rotation-policy
 ```
 
-### `create-file <name>` / `delete-file <name>`
+### `create-file <name> <title> [description]` / `delete-file <name>`
+
+`create-file` requires a file name and title, plus an optional description. It writes the new file as a `# <title>` heading followed by the optional description text below it.
 
 Name must not contain `/`, must not start with `.`, and must not include the `.md` suffix.
 
 ```sh
-memory-md create-file infra
+memory-md create-file infra "Infrastructure" "Shared infrastructure notes."
 memory-md delete-file infra
 ```
 

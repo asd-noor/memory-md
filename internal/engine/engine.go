@@ -234,10 +234,14 @@ func ValidateName(name string) error {
 	return nil
 }
 
-// CreateFile creates an empty .md file. Fails if it already exists.
-func (e *Engine) CreateFile(name string) error {
+// CreateFile creates a new .md file with a required title and optional description.
+func (e *Engine) CreateFile(name, title, description string) error {
 	if err := ValidateName(name); err != nil {
 		return err
+	}
+	title = strings.TrimSpace(title)
+	if title == "" {
+		return fmt.Errorf("title must not be empty")
 	}
 	path := filepath.Join(e.memDir, name+".md")
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0644)
@@ -247,7 +251,16 @@ func (e *Engine) CreateFile(name string) error {
 		}
 		return fmt.Errorf("engine.CreateFile: %w", err)
 	}
-	return f.Close()
+	defer f.Close()
+
+	content := "# " + title + "\n"
+	if desc := strings.TrimSpace(description); desc != "" {
+		content += "\n" + desc + "\n"
+	}
+	if _, err := f.WriteString(content); err != nil {
+		return fmt.Errorf("engine.CreateFile write: %w", err)
+	}
+	return nil
 }
 
 // DeleteFile removes a .md file and all associated index data.

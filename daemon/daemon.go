@@ -180,13 +180,15 @@ func Run(memDir string) error {
 // ── Request / response types ──────────────────────────────────────────────────
 
 type request struct {
-	Cmd     string `json:"Cmd"`
-	Path    string `json:"Path,omitempty"`
-	Name    string `json:"Name,omitempty"`
-	Heading string `json:"Heading,omitempty"`
-	Content string `json:"Content,omitempty"`
-	Query   string `json:"Query,omitempty"`
-	Top     int    `json:"Top,omitempty"`
+	Cmd         string `json:"Cmd"`
+	Path        string `json:"Path,omitempty"`
+	Name        string `json:"Name,omitempty"`
+	Title       string `json:"Title,omitempty"`
+	Description string `json:"Description,omitempty"`
+	Heading     string `json:"Heading,omitempty"`
+	Content     string `json:"Content,omitempty"`
+	Query       string `json:"Query,omitempty"`
+	Top         int    `json:"Top,omitempty"`
 }
 
 type errResponse struct {
@@ -296,7 +298,7 @@ func serve(conn net.Conn, eng *engine.Engine) {
 		writeJSON(conn, okResponse{Ok: true})
 
 	case "create-file":
-		if err := eng.CreateFile(req.Name); err != nil {
+		if err := eng.CreateFile(req.Name, req.Title, req.Description); err != nil {
 			writeJSON(conn, errResponse{Ok: false, Error: err.Error()})
 			return
 		}

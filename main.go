@@ -8,7 +8,7 @@
 //	memory-md new <path> [--heading <text>]
 //	memory-md update <path>
 //	memory-md delete <path>
-//	memory-md create-file <name>
+//	memory-md create-file <name> <title> [description]
 //	memory-md delete-file <name>
 //	memory-md snapshot
 //	memory-md validate-file <name>
@@ -150,10 +150,19 @@ func main() {
 		handleOkResponse(resp)
 
 	case "create-file":
-		if len(args) == 0 {
-			fatal("usage: memory-md create-file <name>")
+		if len(args) < 2 {
+			fatal("usage: memory-md create-file <name> <title> [description]")
 		}
-		resp := sendRequest(memDir, map[string]any{"Cmd": "create-file", "Name": args[0]})
+		description := ""
+		if len(args) > 2 {
+			description = strings.Join(args[2:], " ")
+		}
+		resp := sendRequest(memDir, map[string]any{
+			"Cmd":         "create-file",
+			"Name":        args[0],
+			"Title":       args[1],
+			"Description": description,
+		})
 		handleOkResponse(resp)
 
 	case "delete-file":
@@ -405,7 +414,8 @@ Commands:
   new <path> [--heading T]  Create a new section (body from stdin)
   update <path>             Replace section body (from stdin)
   delete <path>             Delete a section and its children
-  create-file <name>        Create a new empty .md file
+  create-file <name> <title> [description]
+                           Create a new .md file with a # title and optional description
   delete-file <name>        Delete a .md file and its index data
   snapshot                  Copy all .md files into a timestamped subdirectory
   validate-file <name>      Validate structural rules of a .md file

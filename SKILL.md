@@ -75,11 +75,11 @@ auth/api-keys/rotation-policy
 
 ## Store a memory
 
-Always create the file first if it doesn't exist, then add sections.
+Always create the file first if it doesn't exist, then add sections. `create-file` requires a file name plus a title for the file's `#` heading, and can also take an optional description placed below that title.
 
 ```sh
 # Create a file (once per topic area)
-memory-md create-file auth
+memory-md create-file auth "Authentication" "Covers auth-related decisions."
 
 # Add a top-level section
 echo "Keys are hashed with bcrypt before storage." \
@@ -194,6 +194,6 @@ memory-md delete-file auth              # removes the entire auth.md file
 | `cannot connect to daemon` | Daemon not running — run `memory-md start-daemon` |
 | `section already exists` | Use `update` instead of `new` |
 | `section not found` | Path doesn't exist — use `search` to find the right path |
-| `file not found` | Run `create-file <name>` first |
+| `file not found` | Run `create-file <name> <title> [description]` first |
 | `parent section not found` | Create the parent section before the child |
 | `file already exists` | `create-file` target already exists — use `new` to add sections to it |
