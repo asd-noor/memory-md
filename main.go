@@ -10,7 +10,7 @@
 //	memory-md delete <path>
 //	memory-md create-file <name> <title> [description]
 //	memory-md delete-file <name>
-//	memory-md snapshot
+//	memory-md snapshot [--move]
 //	memory-md validate-file <name>
 //	memory-md version
 //
@@ -69,7 +69,14 @@ func main() {
 		}
 
 	case "snapshot":
-		runSnapshot(memDir)
+		move := false
+		if len(args) > 1 || (len(args) == 1 && args[0] != "--move") {
+			fatal("usage: memory-md snapshot [--move]")
+		}
+		if len(args) == 1 {
+			move = true
+		}
+		runSnapshot(memDir, move)
 
 	case "validate-file":
 		if len(args) == 0 {
@@ -225,20 +232,35 @@ func runStatus(memDir string) {
 
 // ── Client-side subcommands ───────────────────────────────────────────────────
 
-func runSnapshot(memDir string) {
+func runSnapshot(memDir string, move bool) {
+	snapDir, err := snapshotFiles(memDir, move)
+	if err != nil {
+		fatal(err.Error())
+	}
+	fmt.Println(snapDir)
+}
+
+func snapshotFiles(memDir string, move bool) (string, error) {
 	ts := time.Now().UTC().Format("20060102-150405")
 	snapDir := filepath.Join(memDir, "snapshot-"+ts)
 
 	if _, err := os.Stat(snapDir); err == nil {
-		fatal("snapshot directory already exists: snapshot-" + ts)
+		return "", fmt.Errorf("snapshot directory already exists: snapshot-%s", ts)
 	}
 	if err := os.Mkdir(snapDir, 0755); err != nil {
-		fatal("cannot create snapshot directory: " + err.Error())
+		return "", fmt.Errorf("cannot create snapshot directory: %w", err)
 	}
 
 	entries, err := os.ReadDir(memDir)
 	if err != nil {
-		fatal("cannot read MEMORY_MD_DIR: " + err.Error())
+		return "", fmt.Errorf("cannot read MEMORY_MD_DIR: %w", err)
+	}
+
+	action := copyFile
+	actionName := "copy"
+	if move {
+		action = moveFile
+		actionName = "move"
 	}
 
 	for _, de := range entries {
@@ -247,12 +269,12 @@ func runSnapshot(memDir string) {
 		}
 		src := filepath.Join(memDir, de.Name())
 		dst := filepath.Join(snapDir, de.Name())
-		if err := copyFile(src, dst); err != nil {
-			fmt.Fprintf(os.Stderr, "memory-md snapshot: copy %s: %v\n", de.Name(), err)
+		if err := action(src, dst); err != nil {
+			fmt.Fprintf(os.Stderr, "memory-md snapshot: %s %s: %v\n", actionName, de.Name(), err)
 		}
 	}
 
-	fmt.Println(snapDir)
+	return snapDir, nil
 }
 
 func runValidateFile(memDir, name string) {
@@ -381,6 +403,10 @@ func copyFile(src, dst string) error {
 	return err
 }
 
+func moveFile(src, dst string) error {
+	return os.Rename(src, dst)
+}
+
 func validateName(name string) error {
 	if name == "" {
 		return fmt.Errorf("name must not be empty")
@@ -417,7 +443,8 @@ Commands:
   create-file <name> <title> [description]
                            Create a new .md file with a # title and optional description
   delete-file <name>        Delete a .md file and its index data
-  snapshot                  Copy all .md files into a timestamped subdirectory
+  snapshot [--move]         Copy all .md files into a timestamped subdirectory,
+                           or move them there with --move
   validate-file <name>      Validate structural rules of a .md file
   version                   Print version and exit
   help                      Show this help and exit`)

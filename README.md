@@ -118,7 +118,7 @@ memory-md <command> [args]
 | `delete <path>` | Yes | Delete a section and all its children |
 | `create-file <name> <title> [description]` | Yes | Create a new `.md` file with a `#` title and optional description |
 | `delete-file <name>` | Yes | Delete a `.md` file and all its index data |
-| `snapshot` | No | Copy all `.md` files into a timestamped subdirectory |
+| `snapshot [--move]` | No | Copy all `.md` files into a timestamped subdirectory, or move them there with `--move` |
 | `validate-file <name>` | No | Check structural rules of a `.md` file |
 | `version` | No | Print version and exit |
 | `help` | No | Show usage and exit |
@@ -259,12 +259,15 @@ memory-md create-file infra "Infrastructure" "Shared infrastructure notes."
 memory-md delete-file infra
 ```
 
-### `snapshot`
+### `snapshot [--move]`
 
-Copies all root-level `.md` files into `$MEMORY_MD_DIR/snapshot-<UTC timestamp>/`. Subdirectories (including other snapshots) are ignored by the watcher and are never indexed.
+By default, copies all root-level `.md` files into `$MEMORY_MD_DIR/snapshot-<UTC timestamp>/`. With `--move`, it creates the snapshot directory and moves those root-level `.md` files into it instead. Subdirectories (including other snapshots) are ignored by the watcher and are never indexed.
 
 ```sh
 memory-md snapshot
+# prints: /home/user/notes/snapshot-20260410-150405
+
+memory-md snapshot --move
 # prints: /home/user/notes/snapshot-20260410-150405
 ```
 

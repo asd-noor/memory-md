@@ -184,6 +184,7 @@ memory-md delete-file auth              # removes the entire auth.md file
 | Correcting or updating existing content | `update` |
 | Removing outdated information | `delete` or `delete-file` |
 | Backing up before bulk changes | `snapshot` |
+| Archiving root-level markdown files into a snapshot dir | `snapshot --move` |
 
 ---
 
