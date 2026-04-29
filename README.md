@@ -472,6 +472,24 @@ memory-md/
 
 ---
 
+## Simiar Concepts
+
+[Andrej Karpathy's tweet about LLM Wiki](https://x.com/karpathy/status/2039805659525644595?s=20) describes a similar concept of a persistent, file-based memory store for AI agents.
+
+Both use markdown as source of truth, written and maintained by an LLM, rarely touched by humans.
+
+Karpathy's system is a full research pipeline: ingest raw sources → LLM compiles a wiki → Q&A against it → outputs filed back in → linting. It's document-scale (papers, articles, images) with Obsidian as a visual frontend.
+
+**memory-md** + an agent (Claude Code, OpenAI Codex, Gemini CLI etc.) is the same loop at project context scale: agent writes decisions, architecture, discoveries, and corrections into .md sections as it works; retrieves them via hybrid search before every action; and the knowledge compounds across sessions. The daemon + SQLite index is the part Karpathy vibe-coded himself.
+
+The core difference is scope and completeness:
+  - Karpathy's is a whole product vision — ingest pipeline, visualization, linting, output rendering
+  - **memory-md** is the storage/retrieval engine of that vision, already productized, but scoped to one use case: keeping an AI agent grounded across sessions in a single project
+
+His closing line — _room for an incredible product instead of a hacky collection of scripts_ — is the problem **memory-md** tries to solve for the coding-agent case.
+
+---
+
 ## License
 
 This project is licensed under the GNU General Public License v3.0 - see the [LICENSE](LICENSE) file for details.
