@@ -11,6 +11,7 @@ import (
 	"charm.land/bubbles/v2/list"
 	"charm.land/bubbles/v2/textinput"
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/glamour"
 )
 
 // ---------------------------------------------------------------------------
@@ -21,6 +22,7 @@ type focusState int
 
 const (
 	focusSidebar focusState = iota
+	focusPreview
 	focusEditor
 	focusCommand
 )
@@ -76,11 +78,14 @@ type model struct {
 	focus        focusState
 	current      string // loaded file name (no .md)
 	savedContent string
-	warnQuit     bool
-	width        int
-	height       int
-	err          error
-	statusMsg    string
+	warnQuit        bool
+	previewContent  string // file content shown in preview (= last saved)
+	previewScrollTop int
+	previewGPressed bool   // waiting for second 'g' in preview nav
+	width           int
+	height          int
+	err             error
+	statusMsg       string
 }
 
 func newModel(memDir string) model {
@@ -101,6 +106,7 @@ func newModel(memDir string) model {
 		focus:     focusSidebar,
 	}
 	m.list = newFileList(m.buildItems(), sidebarWidth, 20)
+	m.previewContent = ""
 	return m
 }
 
@@ -225,6 +231,8 @@ func (m model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.handleCommandFocus(msg)
 	case focusSidebar:
 		return m.handleSidebarFocus(msg)
+	case focusPreview:
+		return m.handlePreviewFocus(msg)
 	case focusEditor:
 		return m.handleEditorFocus(msg)
 	}
@@ -256,7 +264,9 @@ func (m model) handleSidebarFocus(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	k := msg.String()
 	switch k {
 	case "tab":
-		m.focus = focusEditor
+		if m.current != "" {
+			m.focus = focusPreview
+		}
 		return m, nil
 	case "q":
 		if m.isDirty() {
@@ -285,9 +295,11 @@ func (m model) handleSidebarFocus(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			m.current = item.filePath()
-			m.ed.SetContent(content)
+			m.previewContent = content
 			m.savedContent = content
-			m.focus = focusEditor
+			m.ed.SetContent(content)
+			m.previewScrollTop = 0
+			m.focus = focusPreview
 			m = m.applyDimensions()
 		}
 		return m, nil
@@ -298,6 +310,53 @@ func (m model) handleSidebarFocus(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 }
 
+func (m model) handlePreviewFocus(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	k := msg.String()
+	switch k {
+	case "tab":
+		m.focus = focusSidebar
+		m.previewGPressed = false
+	case "q":
+		return m, tea.Quit
+	case "e":
+		if m.current != "" {
+			m.focus = focusEditor
+			m.previewGPressed = false
+		}
+	case "j":
+		m.previewScrollTop++
+		m.previewGPressed = false
+	case "k":
+		if m.previewScrollTop > 0 {
+			m.previewScrollTop--
+		}
+		m.previewGPressed = false
+	case "ctrl+f", "ctrl+d":
+		_, editorH := m.editorDims()
+		m.previewScrollTop += editorH / 2
+		m.previewGPressed = false
+	case "ctrl+b", "ctrl+u":
+		_, editorH := m.editorDims()
+		if m.previewScrollTop -= editorH / 2; m.previewScrollTop < 0 {
+			m.previewScrollTop = 0
+		}
+		m.previewGPressed = false
+	case "g":
+		if m.previewGPressed {
+			m.previewScrollTop = 0
+			m.previewGPressed = false
+		} else {
+			m.previewGPressed = true
+		}
+	case "G":
+		m.previewScrollTop = 1<<31 - 1 // clamped in renderPreviewPane
+		m.previewGPressed = false
+	default:
+		m.previewGPressed = false
+	}
+	return m, nil
+}
+
 func (m model) handleEditorFocus(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	k := msg.String()
 	switch k {
@@ -305,17 +364,14 @@ func (m model) handleEditorFocus(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.focus = focusSidebar
 		return m, nil
 	case "q":
-		// quit from editor only in normal mode; in insert/visual pass it through
+		// return to preview from editor only in normal mode; in insert/visual pass it through
 		if m.ed.mode == modeNormal {
 			if m.isDirty() {
-				if m.warnQuit {
-					return m, tea.Quit
-				}
 				m.warnQuit = true
-				m.statusMsg = "unsaved changes — press q again to quit, or :w to save"
+				m.statusMsg = "unsaved changes — use :w to save or :q! to discard"
 				return m, nil
 			}
-			return m, tea.Quit
+			return m.returnToPreview()
 		}
 		edCmd := m.ed.Update(msg)
 		return m, edCmd
@@ -330,6 +386,14 @@ func (m model) handleEditorFocus(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 }
 
+func (m model) returnToPreview() (tea.Model, tea.Cmd) {
+	m.previewContent = m.savedContent
+	m.focus = focusPreview
+	m.previewScrollTop = 0
+	m.warnQuit = false
+	return m, nil
+}
+
 func (m model) execCmd(cmd string) (tea.Model, tea.Cmd) {
 	switch cmd {
 	case "w":
@@ -342,6 +406,7 @@ func (m model) execCmd(cmd string) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.savedContent = m.ed.GetText()
+		m.previewContent = m.savedContent
 		m.statusMsg = fmt.Sprintf("written %s.md", m.current)
 	case "wq":
 		if m.current == "" {
@@ -352,15 +417,17 @@ func (m model) execCmd(cmd string) (tea.Model, tea.Cmd) {
 			m.err = err
 			return m, nil
 		}
-		return m, tea.Quit
+		m.savedContent = m.ed.GetText()
+		m.previewContent = m.savedContent
+		return m.returnToPreview()
 	case "q":
 		if m.isDirty() {
-			m.err = fmt.Errorf("unsaved changes (use :q! to force, :wq to save and quit)")
+			m.err = fmt.Errorf("unsaved changes (use :wq to save, :q! to discard)")
 			return m, nil
 		}
-		return m, tea.Quit
+		return m.returnToPreview()
 	case "q!":
-		return m, tea.Quit
+		return m.returnToPreview()
 	default:
 		m.err = fmt.Errorf("unknown command: %s", cmd)
 	}
@@ -432,20 +499,25 @@ func (m model) render() string {
 		statusContent = m.statusBar(rightW)
 	}
 	sbStyle := statusBarBaseStyle
-	if m.focus == focusEditor || m.focus == focusCommand {
+	if m.focus == focusEditor || m.focus == focusCommand || m.focus == focusPreview {
 		sbStyle = statusBarFocusStyle
 	}
 	status := sbStyle.Width(rightW).Render(statusContent)
 
-	// editor
-	editorContent := m.ed.View()
-	editorView := lipgloss.NewStyle().
+	// main content pane
+	var mainContent string
+	if m.focus == focusPreview {
+		mainContent = m.renderPreviewPane(rightW, editorH)
+	} else {
+		mainContent = m.ed.View()
+	}
+	mainView := lipgloss.NewStyle().
 		Width(rightW).
 		Height(editorH).
-		Render(editorContent)
+		Render(mainContent)
 
-	// right panel: status on top, editor below
-	right := lipgloss.JoinVertical(lipgloss.Left, status, editorView)
+	// right panel: status on top, content below
+	right := lipgloss.JoinVertical(lipgloss.Left, status, mainView)
 
 	// full inner area
 	inner := lipgloss.JoinHorizontal(lipgloss.Top, sidebar, right)
@@ -464,7 +536,7 @@ func (m model) statusBar(width int) string {
 		return statusStyle.Render(m.statusMsg)
 	}
 
-	// default: filename left, mode/hint right
+	// default: filename left, hints right
 	filename := m.current
 	if filename == "" {
 		filename = "[no file]"
@@ -473,7 +545,15 @@ func (m model) statusBar(width int) string {
 		filename += " [+]"
 	}
 
-	right := m.ed.ModeString() + "  Tab:switch  :w :wq :q"
+	var right string
+	switch m.focus {
+	case focusPreview:
+		right = "e:edit  Tab:sidebar  j/k:scroll  q:quit"
+	case focusEditor:
+		right = m.ed.ModeString() + "  Tab:sidebar  :w :wq :q :q!"
+	default:
+		right = "Tab:switch  q:quit"
+	}
 	left := filename
 
 	gap := width - len([]rune(left)) - len([]rune(right))
@@ -482,4 +562,54 @@ func (m model) statusBar(width int) string {
 	}
 
 	return statusStyle.Render(left + strings.Repeat(" ", gap) + right)
+}
+
+func (m model) renderPreviewPane(width, height int) string {
+	if m.previewContent == "" {
+		return strings.Repeat("\n", height)
+	}
+	r, err := glamour.NewTermRenderer(
+		glamour.WithStylePath("dark"),
+		glamour.WithWordWrap(width),
+	)
+	var rendered string
+	if err == nil {
+		if out, rerr := r.Render(m.previewContent); rerr == nil {
+			rendered = out
+		}
+	}
+	if rendered == "" {
+		rendered = m.previewContent
+	}
+	lines := strings.Split(strings.TrimRight(rendered, "\n"), "\n")
+
+	scrollTop := m.previewScrollTop
+	maxScroll := len(lines) - height
+	if maxScroll < 0 {
+		maxScroll = 0
+	}
+	if scrollTop > maxScroll {
+		scrollTop = maxScroll
+	}
+	if scrollTop < 0 {
+		scrollTop = 0
+	}
+
+	end := scrollTop + height
+	if end > len(lines) {
+		end = len(lines)
+	}
+	visible := lines[scrollTop:end]
+
+	var sb strings.Builder
+	for i, l := range visible {
+		if i > 0 {
+			sb.WriteByte('\n')
+		}
+		sb.WriteString(l)
+	}
+	for i := len(visible); i < height; i++ {
+		sb.WriteByte('\n')
+	}
+	return sb.String()
 }
