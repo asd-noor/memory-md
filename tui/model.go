@@ -25,6 +25,7 @@ const (
 	focusPreview
 	focusEditor
 	focusCommand
+	focusHeaderPicker
 )
 
 // ---------------------------------------------------------------------------
@@ -82,6 +83,8 @@ type model struct {
 	previewContent  string // file content shown in preview (= last saved)
 	previewScrollTop int
 	previewGPressed bool   // waiting for second 'g' in preview nav
+	headers         []headerEntry
+	headerCursor    int
 	width           int
 	height          int
 	err             error
@@ -233,6 +236,8 @@ func (m model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.handleSidebarFocus(msg)
 	case focusPreview:
 		return m.handlePreviewFocus(msg)
+	case focusHeaderPicker:
+		return m.handleHeaderPickerFocus(msg)
 	case focusEditor:
 		return m.handleEditorFocus(msg)
 	}
@@ -318,6 +323,13 @@ func (m model) handlePreviewFocus(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.previewGPressed = false
 	case "q":
 		return m, tea.Quit
+	case "b":
+		if m.current != "" {
+			m.headers = parseHeaders(m.previewContent)
+			m.headerCursor = 0
+			m.focus = focusHeaderPicker
+			m.previewGPressed = false
+		}
 	case "e":
 		if m.current != "" {
 			m.focus = focusEditor
@@ -384,6 +396,28 @@ func (m model) handleEditorFocus(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		edCmd := m.ed.Update(msg)
 		return m, edCmd
 	}
+}
+
+func (m model) handleHeaderPickerFocus(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "esc", "q":
+		m.focus = focusPreview
+	case "j":
+		if m.headerCursor < len(m.headers)-1 {
+			m.headerCursor++
+		}
+	case "k":
+		if m.headerCursor > 0 {
+			m.headerCursor--
+		}
+	case "enter":
+		if len(m.headers) > 0 {
+			rightW, _ := m.editorDims()
+			m = m.jumpToHeader(m.headers[m.headerCursor], rightW)
+		}
+		m.focus = focusPreview
+	}
+	return m, nil
 }
 
 func (m model) returnToPreview() (tea.Model, tea.Cmd) {
@@ -506,9 +540,12 @@ func (m model) render() string {
 
 	// main content pane
 	var mainContent string
-	if m.focus == focusPreview {
+	switch m.focus {
+	case focusPreview:
 		mainContent = m.renderPreviewPane(rightW, editorH)
-	} else {
+	case focusHeaderPicker:
+		mainContent = m.renderHeaderPicker(rightW, editorH)
+	default:
 		mainContent = m.ed.View()
 	}
 	mainView := lipgloss.NewStyle().
@@ -548,7 +585,7 @@ func (m model) statusBar(width int) string {
 	var right string
 	switch m.focus {
 	case focusPreview:
-		right = "e:edit  Tab:sidebar  j/k:scroll  q:quit"
+		right = "b:headings  e:edit  Tab:sidebar  j/k:scroll  q:quit"
 	case focusEditor:
 		right = m.ed.ModeString() + "  Tab:sidebar  :w :wq :q :q!"
 	default:
