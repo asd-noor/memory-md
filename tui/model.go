@@ -2,7 +2,6 @@ package tui
 
 import (
 	"fmt"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
@@ -65,8 +64,11 @@ var (
 // ---------------------------------------------------------------------------
 
 type model struct {
-	files        []string
-	memDir       string
+	topFiles []string            // sorted top-level .md names (no ext)
+	dirs     map[string][]string // dir → sorted sub-file names (no ext)
+	dirOrder []string            // sorted dir names
+	expanded map[string]bool     // which dirs are expanded
+	memDir   string
 	list         list.Model
 	ed           editor
 	cmdInput     textinput.Model
@@ -81,37 +83,75 @@ type model struct {
 }
 
 func newModel(memDir string) model {
-	files := listFiles(memDir)
+	topFiles, dirs, dirOrder := discoverEntries(memDir)
 
 	ti := textinput.New()
 	ti.Prompt = ":"
 	ti.CharLimit = 256
 
 	m := model{
-		files:  files,
-		memDir: memDir,
-		ed:     newEditorComponent(""),
-		list:   newFileList(files, sidebarWidth, 20),
-		cmdInput: ti,
-		focus:    focusSidebar,
+		topFiles:  topFiles,
+		dirs:      dirs,
+		dirOrder:  dirOrder,
+		expanded:  make(map[string]bool),
+		memDir:    memDir,
+		ed:        newEditorComponent(""),
+		cmdInput:  ti,
+		focus:     focusSidebar,
 	}
+	m.list = newFileList(m.buildItems(), sidebarWidth, 20)
 	return m
 }
 
-func listFiles(dir string) []string {
-	var files []string
-	_ = filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return nil
+// discoverEntries reads the memory dir (depth 1 only) and returns:
+// - topFiles: sorted .md names at the root (no ext)
+// - dirs: map of dir name → sorted .md names inside (no ext)
+// - dirOrder: sorted dir names
+func discoverEntries(dir string) (topFiles []string, dirs map[string][]string, dirOrder []string) {
+	dirs = make(map[string][]string)
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		if e.IsDir() {
+			subs, _ := os.ReadDir(filepath.Join(dir, e.Name()))
+			var subFiles []string
+			for _, s := range subs {
+				if !s.IsDir() && strings.HasSuffix(s.Name(), ".md") {
+					subFiles = append(subFiles, strings.TrimSuffix(s.Name(), ".md"))
+				}
+			}
+			if len(subFiles) > 0 {
+				sort.Strings(subFiles)
+				dirs[e.Name()] = subFiles
+				dirOrder = append(dirOrder, e.Name())
+			}
+		} else if strings.HasSuffix(e.Name(), ".md") {
+			topFiles = append(topFiles, strings.TrimSuffix(e.Name(), ".md"))
 		}
-		if !d.IsDir() && strings.HasSuffix(d.Name(), ".md") {
-			rel, _ := filepath.Rel(dir, path)
-			files = append(files, strings.TrimSuffix(rel, ".md"))
+	}
+	sort.Strings(topFiles)
+	sort.Strings(dirOrder)
+	return
+}
+
+// buildItems constructs the flat list of treeItems reflecting current expand state.
+func (m model) buildItems() []list.Item {
+	var items []list.Item
+	for _, f := range m.topFiles {
+		items = append(items, treeItem{kind: kindFile, name: f})
+	}
+	for _, d := range m.dirOrder {
+		exp := m.expanded[d]
+		items = append(items, treeItem{kind: kindDir, name: d, expanded: exp})
+		if exp {
+			for _, f := range m.dirs[d] {
+				items = append(items, treeItem{kind: kindSubFile, name: f, dir: d})
+			}
 		}
-		return nil
-	})
-	sort.Strings(files)
-	return files
+	}
+	return items
 }
 
 func loadFile(memDir, name string) (string, error) {
@@ -228,13 +268,22 @@ func (m model) handleSidebarFocus(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, tea.Quit
 	case "enter":
-		if item, ok := m.list.SelectedItem().(fileItem); ok {
-			content, err := loadFile(m.memDir, item.name)
+		sel := m.list.SelectedItem()
+		if sel == nil {
+			return m, nil
+		}
+		item := sel.(treeItem)
+		switch item.kind {
+		case kindDir:
+			m.expanded[item.name] = !m.expanded[item.name]
+			m.list.SetItems(m.buildItems())
+		case kindFile, kindSubFile:
+			content, err := loadFile(m.memDir, item.filePath())
 			if err != nil {
 				m.err = err
 				return m, nil
 			}
-			m.current = item.name
+			m.current = item.filePath()
 			m.ed.SetContent(content)
 			m.savedContent = content
 			m.focus = focusEditor
