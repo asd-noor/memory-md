@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/list"
@@ -13,8 +12,6 @@ import (
 
 const (
 	sidebarWidth = 26
-	borderSize   = 2 // top+bottom or left+right border chars
-	cmdBoxHeight = 3 // border-top + input line + border-bottom
 )
 
 type focusState int
@@ -26,18 +23,31 @@ const (
 )
 
 var (
-	normalBorderStyle = lipgloss.NewStyle().
-				Border(lipgloss.NormalBorder()).
-				BorderForeground(lipgloss.Color("240"))
+	outerStyle = lipgloss.NewStyle().
+			Border(lipgloss.NormalBorder()).
+			BorderForeground(lipgloss.Color("240"))
 
-	focusBorderStyle = lipgloss.NewStyle().
-				Border(lipgloss.NormalBorder()).
-				BorderForeground(lipgloss.Color("62"))
+	sidebarBaseStyle = lipgloss.NewStyle().
+				Width(sidebarWidth).
+				BorderRight(true).
+				BorderStyle(lipgloss.NormalBorder()).
+				BorderRightForeground(lipgloss.Color("240"))
 
-	cmdBoxStyle = lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color("141")).
-			Padding(0, 1)
+	sidebarFocusBaseStyle = lipgloss.NewStyle().
+				Width(sidebarWidth).
+				BorderRight(true).
+				BorderStyle(lipgloss.NormalBorder()).
+				BorderRightForeground(lipgloss.Color("62"))
+
+	editorBaseStyle = lipgloss.NewStyle().
+			BorderBottom(true).
+			BorderStyle(lipgloss.NormalBorder()).
+			BorderBottomForeground(lipgloss.Color("240"))
+
+	editorFocusBaseStyle = lipgloss.NewStyle().
+				BorderBottom(true).
+				BorderStyle(lipgloss.NormalBorder()).
+				BorderBottomForeground(lipgloss.Color("62"))
 
 	statusStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("244"))
@@ -151,11 +161,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "esc":
 				m.focus = focusEditor
 				m.cmdInput.Blur()
+				m = m.applyDimensions()
 				return m, nil
 			case "enter":
 				cmd := m.execCmd(m.cmdInput.Value())
 				m.focus = focusEditor
 				m.cmdInput.Blur()
+				m = m.applyDimensions()
 				return m, cmd
 			default:
 				var tiCmd tea.Cmd
@@ -188,7 +200,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.current = item.name
 						m.savedContent = content
 						m.editor = newEditor(content)
-						m.editor = m.applyEditorSize(m.editor)
+						m = m.applyDimensions()
 						m.focus = focusEditor
 						cmds = append(cmds, m.editor.Init())
 					}
@@ -209,6 +221,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// Intercept colon — open floating command input.
 				m.focus = focusCommand
 				m.cmdInput.SetValue("")
+				m = m.applyDimensions()
 				cmds = append(cmds, m.cmdInput.Focus())
 				return m, tea.Batch(cmds...)
 			}
@@ -283,60 +296,49 @@ func (m model) View() string {
 }
 
 func (m model) render() string {
-	// When the command box is open it sits below the panels; shrink panels
-	// so the total fits within the terminal height.
-	extraH := 0
-	if m.focus == focusCommand {
-		extraH = cmdBoxHeight
+	innerW := m.width - 2
+	innerH := m.height - 2
+	rightW := innerW - sidebarWidth - 1 // 1 = sidebar right border
+	editorH := innerH - 2               // 1 bottom border + 1 status row
+	if rightW < 10 {
+		rightW = 10
+	}
+	if editorH < 1 {
+		editorH = 1
 	}
 
-	statusH := 1
-	innerH := m.height - borderSize - statusH - extraH
-	if innerH < 1 {
-		innerH = 1
-	}
-
-	editorW := m.width - sidebarWidth - borderSize*2
-	if editorW < 10 {
-		editorW = 10
-	}
-
-	// Sidebar
+	// Sidebar — fixed width, always full inner height.
 	var sStyle lipgloss.Style
 	if m.focus == focusSidebar {
-		sStyle = focusBorderStyle
+		sStyle = sidebarFocusBaseStyle
 	} else {
-		sStyle = normalBorderStyle
+		sStyle = sidebarBaseStyle
 	}
-	sidePanel := sStyle.Width(sidebarWidth).Height(innerH).Render(m.list.View())
+	sidebar := sStyle.Height(innerH).Render(m.list.View())
 
-	// Editor
+	// Editor panel.
 	var eStyle lipgloss.Style
 	if m.focus == focusEditor || m.focus == focusCommand {
-		eStyle = focusBorderStyle
+		eStyle = editorFocusBaseStyle
 	} else {
-		eStyle = normalBorderStyle
+		eStyle = editorBaseStyle
 	}
-	editorPanel := eStyle.Width(editorW).Height(innerH).Render(m.editor.View())
+	editor := eStyle.Width(rightW).Height(editorH).Render(m.editor.View())
 
-	layout := lipgloss.JoinHorizontal(lipgloss.Top, sidePanel, editorPanel)
-
-	// Command box (shown below panels when active).
+	// Status/command bar — 1 row, no border.
+	var statusContent string
 	if m.focus == focusCommand {
-		inputView := m.cmdInput.View()
-		// Inner width = editor panel width minus padding (2×1) and border (2×1).
-		innerW := editorW - 4
-		if innerW < 10 {
-			innerW = 10
-		}
-		m.cmdInput.Width = innerW
-		box := cmdBoxStyle.Width(innerW).Render(inputView)
-		// Right-align the box under the editor panel.
-		leftPad := strings.Repeat(" ", sidebarWidth+borderSize)
-		return fmt.Sprintf("%s\n%s%s\n%s", layout, leftPad, box, m.statusBar())
+		m.cmdInput.Width = rightW - 2 // account for prompt
+		statusContent = m.cmdInput.View()
+	} else {
+		statusContent = m.statusBar()
 	}
+	status := lipgloss.NewStyle().Width(rightW).Render(statusContent)
 
-	return fmt.Sprintf("%s\n%s", layout, m.statusBar())
+	// Compose right side and full layout.
+	right := lipgloss.JoinVertical(lipgloss.Left, editor, status)
+	inner := lipgloss.JoinHorizontal(lipgloss.Top, sidebar, right)
+	return outerStyle.Render(inner)
 }
 
 func (m model) statusBar() string {
@@ -371,29 +373,25 @@ func (m model) statusBar() string {
 
 // --- Dimensions ---
 
+func (m model) editorDims() (rightW, editorH int) {
+	innerW := m.width - 2
+	innerH := m.height - 2
+	rightW = innerW - sidebarWidth - 1
+	if rightW < 10 {
+		rightW = 10
+	}
+	editorH = innerH - 2
+	if editorH < 1 {
+		editorH = 1
+	}
+	return
+}
+
 func (m model) applyDimensions() model {
-	m.list.SetSize(sidebarWidth, m.innerH())
-	m.editor = m.applyEditorSize(m.editor)
+	rightW, editorH := m.editorDims()
+	innerH := m.height - 2
+	m.list.SetSize(sidebarWidth, innerH)
+	newEd, _ := m.editor.SetSize(rightW, editorH)
+	m.editor = newEd.(vimtea.Editor)
 	return m
-}
-
-func (m model) innerH() int {
-	statusH := 1
-	h := m.height - borderSize - statusH
-	if h < 1 {
-		h = 1
-	}
-	return h
-}
-
-func (m model) applyEditorSize(ed vimtea.Editor) vimtea.Editor {
-	innerH := m.innerH()
-	editorW := m.width - sidebarWidth - borderSize*2
-	if editorW < 10 {
-		editorW = 10
-	}
-	// vimtea with status bar renders (h-1) total lines.
-	// lipgloss border interior = innerH-2. Pass innerH-1 so output = innerH-2.
-	newEd, _ := ed.SetSize(editorW, innerH-1)
-	return newEd.(vimtea.Editor)
 }

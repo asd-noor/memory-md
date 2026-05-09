@@ -47,7 +47,7 @@ func saveFile(dir, name, content string) error {
 func newEditor(content string) vimtea.Editor {
 	ed := vimtea.NewEditor(
 		vimtea.WithContent(content),
-		vimtea.WithEnableStatusBar(true),
+		vimtea.WithEnableStatusBar(false),
 		vimtea.WithEnableModeCommand(false),
 		vimtea.WithFileName("file.md"),
 	)
