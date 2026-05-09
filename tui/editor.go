@@ -5,7 +5,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/kujtimiihoxha/vimtea"
 )
 
@@ -42,20 +41,15 @@ func saveFile(dir, name, content string) error {
 	return os.WriteFile(filepath.Join(dir, name+".md"), []byte(content), 0644)
 }
 
-// newEditor creates a vimtea.Editor pre-loaded with content and a :w command
-// that sends saveRequestMsg back to the parent model.
+// newEditor creates a vimtea.Editor pre-loaded with content.
+// Command mode is disabled — `:` is intercepted by the parent model which
+// shows its own floating command input instead.
 func newEditor(content string) vimtea.Editor {
 	ed := vimtea.NewEditor(
 		vimtea.WithContent(content),
 		vimtea.WithEnableStatusBar(true),
+		vimtea.WithEnableModeCommand(false),
 		vimtea.WithFileName("file.md"),
 	)
-
-	saveFn := func(_ vimtea.Buffer, _ []string) tea.Cmd {
-		return func() tea.Msg { return saveRequestMsg{} }
-	}
-	ed.AddCommand("w", saveFn)
-	ed.AddCommand("wq", saveFn) // convenience alias
-
 	return ed
 }
