@@ -4,16 +4,21 @@ import (
 	"fmt"
 	"os"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 )
 
-// Run starts the memory-md TUI for the given memory directory.
+// Run starts the TUI for the given memory directory.
 func Run(memDir string) error {
-	if info, err := os.Stat(memDir); err != nil || !info.IsDir() {
-		return fmt.Errorf("MEMORY_MD_DIR %q is not a valid directory", memDir)
+	info, err := os.Stat(memDir)
+	if err != nil {
+		return fmt.Errorf("memory dir: %w", err)
 	}
+	if !info.IsDir() {
+		return fmt.Errorf("memory dir is not a directory: %s", memDir)
+	}
+
 	m := newModel(memDir)
-	p := tea.NewProgram(m, tea.WithAltScreen())
-	_, err := p.Run()
+	p := tea.NewProgram(m)
+	_, err = p.Run()
 	return err
 }
