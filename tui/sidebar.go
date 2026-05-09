@@ -3,6 +3,8 @@ package tui
 import (
 	"fmt"
 	"io"
+	"path/filepath"
+	"strings"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/bubbles/v2/list"
@@ -11,7 +13,11 @@ import (
 
 type fileItem struct{ name string }
 
-func (f fileItem) Title() string       { return f.name + ".md" }
+func (f fileItem) Title() string {
+	parts := strings.Split(f.name, string(filepath.Separator))
+	indent := strings.Repeat("  ", len(parts)-1)
+	return indent + parts[len(parts)-1] + ".md"
+}
 func (f fileItem) Description() string { return "" }
 func (f fileItem) FilterValue() string { return f.name }
 

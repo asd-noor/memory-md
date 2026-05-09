@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
@@ -98,16 +99,17 @@ func newModel(memDir string) model {
 }
 
 func listFiles(dir string) []string {
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return nil
-	}
 	var files []string
-	for _, e := range entries {
-		if !e.IsDir() && strings.HasSuffix(e.Name(), ".md") {
-			files = append(files, strings.TrimSuffix(e.Name(), ".md"))
+	_ = filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return nil
 		}
-	}
+		if !d.IsDir() && strings.HasSuffix(d.Name(), ".md") {
+			rel, _ := filepath.Rel(dir, path)
+			files = append(files, strings.TrimSuffix(rel, ".md"))
+		}
+		return nil
+	})
 	sort.Strings(files)
 	return files
 }
