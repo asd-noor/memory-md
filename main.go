@@ -33,6 +33,7 @@ import (
 	"memory-md/daemon"
 	"memory-md/internal/parser"
 	"memory-md/internal/pathenc"
+	"memory-md/tui"
 )
 
 // version is set at build time via -ldflags "-X main.version=<ver>".
@@ -63,6 +64,11 @@ func main() {
 	}
 
 	switch cmd {
+	case "tui":
+		if err := tui.Run(memDir); err != nil {
+			fatal(err.Error())
+		}
+
 	case "start-daemon":
 		if err := daemon.Run(memDir); err != nil {
 			fatal(err.Error())
@@ -446,6 +452,7 @@ Commands:
   snapshot [--move]         Copy all .md files into a timestamped subdirectory,
                            or move them there with --move
   validate-file <name>      Validate structural rules of a .md file
+  tui                      Launch the interactive TUI
   version                   Print version and exit
   help                      Show this help and exit`)
 }

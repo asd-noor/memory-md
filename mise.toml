@@ -47,6 +47,19 @@ run = """
 [[ -n "$MEMORY_MD_DIR" ]] && ./memory-md start-daemon || echo "Please set MEMORY_MD_DIR to run the daemon"
 """
 
+[tasks.tui]
+description = "Run the memory-md TUI (requires MEMORY_MD_DIR)"
+run = """
+#!/usr/bin/env bash
+[[ -n "$MEMORY_MD_DIR" ]] || { echo "Please set MEMORY_MD_DIR"; exit 1; }
+go run -tags sqlite_fts5 . tui
+"""
+
+[tasks.tui-build]
+description = "Build the memory-md binary (includes TUI subcommand)"
+depends = ["build"]
+run = "echo Built: memory-md (includes tui subcommand)"
+
 [tasks.lint]
 description = "Run go vet"
 run = """
