@@ -44,8 +44,8 @@ def embed(model, tokenizer, texts: list[str]) -> list[list[float]]:
 
 
 def handle(conn, model, tokenizer):
-    f = conn.makefile("r")
-    line = f.readline()
+    with conn.makefile("r") as f:
+        line = f.readline()
     if not line:
         return
     try:
@@ -56,6 +56,7 @@ def handle(conn, model, tokenizer):
     except Exception as exc:  # noqa: BLE001
         resp = json.dumps({"Error": str(exc)})
     conn.sendall((resp + "\n").encode())
+
 
 
 def main():
@@ -74,25 +75,29 @@ def main():
     server.listen(8)
 
     def shutdown(signum, frame):
+        # Closing the server causes accept() to raise OSError, breaking the
+        # loop cleanly; the finally block below handles socket-file cleanup.
+        server.close()
+
+    signal.signal(signal.SIGTERM, shutdown)
+    signal.signal(signal.SIGINT, shutdown)
+
+    try:
+        while True:
+            try:
+                conn, _ = server.accept()
+            except OSError:
+                break
+            try:
+                handle(conn, model, tokenizer)
+            finally:
+                conn.close()
+    finally:
         server.close()
         try:
             os.unlink(SOCK_PATH)
         except FileNotFoundError:
             pass
-        sys.exit(0)
-
-    signal.signal(signal.SIGTERM, shutdown)
-    signal.signal(signal.SIGINT, shutdown)
-
-    while True:
-        try:
-            conn, _ = server.accept()
-        except OSError:
-            break
-        try:
-            handle(conn, model, tokenizer)
-        finally:
-            conn.close()
 
 
 if __name__ == "__main__":

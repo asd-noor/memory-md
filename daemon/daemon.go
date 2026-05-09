@@ -143,9 +143,13 @@ func Run(memDir string) error {
 	// 9. Handle signals.
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGTERM, syscall.SIGINT, syscall.SIGHUP)
+	serveExited := make(chan struct{})
 	go func() {
-		<-sigCh
-		listener.Close()
+		select {
+		case <-sigCh:
+			listener.Close()
+		case <-serveExited:
+		}
 	}()
 
 	fmt.Fprintf(os.Stderr, "memory-md daemon ready (%s)\n", sockPath)
@@ -158,6 +162,7 @@ func Run(memDir string) error {
 		}
 		go serve(conn, eng)
 	}
+	close(serveExited)
 
 	// 10. Shutdown.
 	w.Close()

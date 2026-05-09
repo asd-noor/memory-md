@@ -124,11 +124,20 @@ func (wt *Watcher) Run() {
 
 		case err, ok := <-wt.w.Errors:
 			if !ok {
-				return
+				goto done
 			}
 			fmt.Fprintf(os.Stderr, "memory-md watcher error: %v\n", err)
 		}
 	}
+done:
+	// Stop all pending debounce timers so their goroutines don't linger
+	// after the watcher has been closed.
+	mu.Lock()
+	for name, e := range inflight {
+		e.timer.Stop()
+		delete(inflight, name)
+	}
+	mu.Unlock()
 }
 
 // Close stops the watcher.
