@@ -6,6 +6,7 @@ import (
 	"unicode"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/glamour"
 	"charm.land/lipgloss/v2"
 )
 
@@ -32,10 +33,11 @@ type editor struct {
 	vAnchorCol int
 	searchPat  string
 	searchDir  int // +1 forward, -1 backward
-	searchInput string
-	gPressed   bool // waiting for second 'g'
-	dPressed   bool // waiting for second 'd'
-	yPressed   bool // waiting for second 'y'
+	searchInput      string
+	gPressed         bool // waiting for second 'g'
+	dPressed         bool // waiting for second 'd'
+	yPressed         bool // waiting for second 'y'
+	previewScrollTop int  // scroll offset for rendered preview (normal mode)
 }
 
 func newEditorComponent(content string) editor {
@@ -68,6 +70,7 @@ func (e *editor) SetContent(s string) {
 	e.col = 0
 	e.wantCol = 0
 	e.scrollTop = 0
+	e.previewScrollTop = 0
 	e.mode = modeNormal
 	e.gPressed = false
 	e.dPressed = false
@@ -349,6 +352,7 @@ func (e *editor) handleInsertMode(msg tea.KeyPressMsg) tea.Cmd {
 	case "esc":
 		e.mode = modeNormal
 		e.clampCol()
+		e.previewScrollTop = e.scrollTop
 	case "enter":
 		e.splitLine()
 		e.scrollToCursor()
@@ -429,6 +433,7 @@ func (e *editor) handleNormalMode(msg tea.KeyPressMsg) tea.Cmd {
 			e.row = 0
 			e.clampCol()
 			e.scrollToCursor()
+			e.previewScrollTop = 0
 			return nil
 		}
 	}
@@ -468,12 +473,16 @@ func (e *editor) handleNormalMode(msg tea.KeyPressMsg) tea.Cmd {
 			e.clampCol()
 			e.scrollToCursor()
 		}
+		e.previewScrollTop++
 	case "k":
 		if e.row > 0 {
 			e.row--
 			e.col = e.wantCol
 			e.clampCol()
 			e.scrollToCursor()
+		}
+		if e.previewScrollTop > 0 {
+			e.previewScrollTop--
 		}
 	case "w":
 		e.wordForward()
@@ -505,6 +514,7 @@ func (e *editor) handleNormalMode(msg tea.KeyPressMsg) tea.Cmd {
 		e.col = e.wantCol
 		e.clampCol()
 		e.scrollToCursor()
+		e.previewScrollTop += half
 	case "ctrl+b", "ctrl+u":
 		half := e.height / 2
 		if half < 1 {
@@ -515,12 +525,16 @@ func (e *editor) handleNormalMode(msg tea.KeyPressMsg) tea.Cmd {
 		e.col = e.wantCol
 		e.clampCol()
 		e.scrollToCursor()
+		if e.previewScrollTop -= half; e.previewScrollTop < 0 {
+			e.previewScrollTop = 0
+		}
 	case "g":
 		e.gPressed = true
 	case "G":
 		e.row = len(e.lines) - 1
 		e.clampCol()
 		e.scrollToCursor()
+		e.previewScrollTop = 1<<31 - 1 // clamped in renderPreview
 	case "d":
 		e.dPressed = true
 	case "y":
@@ -616,9 +630,66 @@ func (e *editor) lineNumWidth() int {
 }
 
 // View renders the editor content.
+// renderPreview renders the buffer as formatted markdown and returns the
+// visible slice (height lines from previewScrollTop).
+func (e *editor) renderPreview() string {
+	if e.height <= 0 || e.width <= 0 {
+		return ""
+	}
+	r, err := glamour.NewTermRenderer(
+		glamour.WithStylePath("dark"),
+		glamour.WithWordWrap(e.width),
+	)
+	var rendered string
+	if err == nil {
+		if out, rerr := r.Render(e.GetText()); rerr == nil {
+			rendered = out
+		}
+	}
+	if rendered == "" {
+		rendered = e.GetText()
+	}
+	lines := strings.Split(strings.TrimRight(rendered, "\n"), "\n")
+
+	// clamp scroll
+	maxScroll := len(lines) - e.height
+	if maxScroll < 0 {
+		maxScroll = 0
+	}
+	if e.previewScrollTop > maxScroll {
+		e.previewScrollTop = maxScroll
+	}
+	if e.previewScrollTop < 0 {
+		e.previewScrollTop = 0
+	}
+
+	end := e.previewScrollTop + e.height
+	if end > len(lines) {
+		end = len(lines)
+	}
+	visible := lines[e.previewScrollTop:end]
+
+	var sb strings.Builder
+	for i, l := range visible {
+		if i > 0 {
+			sb.WriteByte('\n')
+		}
+		sb.WriteString(l)
+	}
+	// pad remaining rows
+	for i := len(visible); i < e.height; i++ {
+		sb.WriteByte('\n')
+	}
+	return sb.String()
+}
+
 func (e *editor) View() string {
 	if e.height <= 0 || e.width <= 0 {
 		return ""
+	}
+
+	if e.mode == modeNormal {
+		return e.renderPreview()
 	}
 
 	numW := e.lineNumWidth()
