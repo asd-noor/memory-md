@@ -303,6 +303,21 @@ func (m model) handleEditorFocus(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "tab":
 		m.focus = focusSidebar
 		return m, nil
+	case "q":
+		// quit from editor only in normal mode; in insert/visual pass it through
+		if m.ed.mode == modeNormal {
+			if m.isDirty() {
+				if m.warnQuit {
+					return m, tea.Quit
+				}
+				m.warnQuit = true
+				m.statusMsg = "unsaved changes — press q again to quit, or :w to save"
+				return m, nil
+			}
+			return m, tea.Quit
+		}
+		edCmd := m.ed.Update(msg)
+		return m, edCmd
 	case ":":
 		m.focus = focusCommand
 		m.cmdInput.SetValue("")
