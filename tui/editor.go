@@ -5,10 +5,15 @@ import (
 	"path/filepath"
 	"strings"
 
-	"charm.land/bubbles/v2/textarea"
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/kujtimiihoxha/vimtea"
 )
 
-// listFiles returns all .md file names (without .md) in dir.
+// saveRequestMsg is dispatched by the :w command so the parent model can
+// perform the actual file-system write.
+type saveRequestMsg struct{}
+
+// listFiles returns all .md file names (without .md extension) in dir.
 func listFiles(dir string) []string {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -37,12 +42,20 @@ func saveFile(dir, name, content string) error {
 	return os.WriteFile(filepath.Join(dir, name+".md"), []byte(content), 0644)
 }
 
-// newEditor creates a configured textarea.Model for use as the editor.
-func newEditor(width, height int) textarea.Model {
-	ta := textarea.New()
-	ta.Placeholder = "Select a file from the sidebar (Tab to switch focus)"
-	ta.ShowLineNumbers = true
-	ta.SetWidth(width)
-	ta.SetHeight(height)
-	return ta
+// newEditor creates a vimtea.Editor pre-loaded with content and a :w command
+// that sends saveRequestMsg back to the parent model.
+func newEditor(content string) vimtea.Editor {
+	ed := vimtea.NewEditor(
+		vimtea.WithContent(content),
+		vimtea.WithEnableStatusBar(true),
+		vimtea.WithFileName("file.md"),
+	)
+
+	saveFn := func(_ vimtea.Buffer, _ []string) tea.Cmd {
+		return func() tea.Msg { return saveRequestMsg{} }
+	}
+	ed.AddCommand("w", saveFn)
+	ed.AddCommand("wq", saveFn) // convenience alias
+
+	return ed
 }

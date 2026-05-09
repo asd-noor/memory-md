@@ -1,7 +1,7 @@
 package tui
 
 import (
-	"charm.land/bubbles/v2/list"
+	"github.com/charmbracelet/bubbles/list"
 )
 
 // fileItem implements list.Item for a markdown file.
