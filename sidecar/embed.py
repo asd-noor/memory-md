@@ -55,7 +55,13 @@ def handle(conn, model, tokenizer):
         resp = json.dumps({"Embeddings": embeddings})
     except Exception as exc:  # noqa: BLE001
         resp = json.dumps({"Error": str(exc)})
-    conn.sendall((resp + "\n").encode())
+    try:
+        conn.sendall((resp + "\n").encode())
+    except (BrokenPipeError, OSError):
+        # Daemon closed the socket (e.g. killed during session shutdown) while
+        # the sidecar was computing an embedding.  Silently discard — the
+        # daemon is already gone so there is nothing useful to report.
+        pass
 
 
 

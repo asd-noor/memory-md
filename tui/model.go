@@ -47,8 +47,7 @@ var (
 	sidebarFocusStyle = lipgloss.NewStyle().
 		Width(sidebarWidth).
 		Border(lipgloss.ThickBorder(), false, true, false, false).
-		BorderForeground(lipgloss.Color("99")).
-		Background(lipgloss.Color("234"))
+		BorderForeground(lipgloss.Color("99"))
 
 	statusBarBaseStyle = lipgloss.NewStyle().
 		Border(lipgloss.NormalBorder(), false, false, true, false).
