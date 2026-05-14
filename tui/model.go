@@ -412,7 +412,11 @@ func (m model) handleHeaderPickerFocus(msg tea.KeyPressMsg) (tea.Model, tea.Cmd)
 	case "enter":
 		if len(m.headers) > 0 {
 			rightW, _ := m.editorDims()
-			m = m.jumpToHeader(m.headers[m.headerCursor], rightW)
+			w := rightW - 1
+			if w < 1 {
+				w = 1
+			}
+			m = m.jumpToHeader(m.headers[m.headerCursor], w)
 		}
 		m.focus = focusPreview
 	}
@@ -601,12 +605,21 @@ func (m model) statusBar(width int) string {
 }
 
 func (m model) renderPreviewPane(width, height int) string {
-	if m.previewContent == "" {
-		return strings.Repeat("\n", height)
+	// Reserve 1 char on the right for the scrollbar.
+	contentWidth := width - 1
+	if contentWidth < 1 {
+		contentWidth = 1
 	}
+
+	if m.previewContent == "" {
+		content := lipgloss.NewStyle().Width(contentWidth).Height(height).Render("")
+		bar := previewScrollbar(height, 0, 0, 0)
+		return lipgloss.JoinHorizontal(lipgloss.Top, content, bar)
+	}
+
 	r, err := glamour.NewTermRenderer(
 		glamour.WithStylePath("dark"),
-		glamour.WithWordWrap(width),
+		glamour.WithWordWrap(contentWidth),
 	)
 	var rendered string
 	if err == nil {
@@ -618,9 +631,10 @@ func (m model) renderPreviewPane(width, height int) string {
 		rendered = m.previewContent
 	}
 	lines := strings.Split(strings.TrimRight(rendered, "\n"), "\n")
+	totalLines := len(lines)
 
 	scrollTop := m.previewScrollTop
-	maxScroll := len(lines) - height
+	maxScroll := totalLines - height
 	if maxScroll < 0 {
 		maxScroll = 0
 	}
@@ -632,8 +646,8 @@ func (m model) renderPreviewPane(width, height int) string {
 	}
 
 	end := scrollTop + height
-	if end > len(lines) {
-		end = len(lines)
+	if end > totalLines {
+		end = totalLines
 	}
 	visible := lines[scrollTop:end]
 
@@ -647,5 +661,49 @@ func (m model) renderPreviewPane(width, height int) string {
 	for i := len(visible); i < height; i++ {
 		sb.WriteByte('\n')
 	}
-	return sb.String()
+
+	content := lipgloss.NewStyle().Width(contentWidth).Height(height).Render(sb.String())
+	bar := previewScrollbar(height, totalLines, scrollTop, height)
+	return lipgloss.JoinHorizontal(lipgloss.Top, content, bar)
+}
+
+var (
+	previewTrackStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("238"))
+	previewThumbStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
+)
+
+// previewScrollbar builds a single-column scrollbar string of `height` lines.
+// It shows a thumb (█) proportional to viewHeight/totalLines at the correct
+// position, and a track (│) everywhere else. When all lines fit in view the
+// track is dimmed to indicate no overflow.
+func previewScrollbar(height, totalLines, scrollTop, viewHeight int) string {
+	trackStyle := previewTrackStyle
+	thumbStyle := previewThumbStyle
+
+	bar := make([]string, height)
+
+	if totalLines <= viewHeight || viewHeight == 0 {
+		// Content fits — show a dim track, no thumb.
+		for i := range bar {
+			bar[i] = trackStyle.Render("│")
+		}
+		return strings.Join(bar, "\n")
+	}
+
+	// Thumb size proportional to how much of the content is visible.
+	thumbSize := height * viewHeight / totalLines
+	if thumbSize < 1 {
+		thumbSize = 1
+	}
+	maxThumbStart := height - thumbSize
+	thumbStart := scrollTop * maxThumbStart / (totalLines - viewHeight)
+
+	for i := range bar {
+		if i >= thumbStart && i < thumbStart+thumbSize {
+			bar[i] = thumbStyle.Render("█")
+		} else {
+			bar[i] = trackStyle.Render("│")
+		}
+	}
+	return strings.Join(bar, "\n")
 }
